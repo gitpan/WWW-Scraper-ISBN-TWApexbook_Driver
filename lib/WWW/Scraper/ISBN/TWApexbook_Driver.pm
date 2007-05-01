@@ -6,7 +6,7 @@ use strict;
 use warnings;
 
 use vars qw($VERSION @ISA);
-$VERSION = '0.01';
+$VERSION = '0.02';
 
 #--------------------------------------------------------------------------
 
@@ -33,8 +33,7 @@ Searches for book information from the TWApexbook's online catalog.
 use WWW::Scraper::ISBN::Driver;
 use WWW::Mechanize;
 use Template::Extract;
-
-use Data::Dumper;
+use Text::Iconv;
 
 ###########################################################################
 #Constants                                                                #
@@ -74,7 +73,6 @@ a valid page is returned, the following fields are returned via the book hash:
   image_link
   pubdate
   publisher
-  price_list
   price_sell
 
 The book_link and image_link refer back to the Apexbook website. 
@@ -94,52 +92,32 @@ sub search {
 	$mechanize->get($url);
 	return undef unless($mechanize->success());
 
-	# The Search Results page
 	my $template = <<END;
-書籍名稱[% ... %]<a href="[% book %]"
+<FORM METHOD=POST ACTION="cart.php?php_mode=additem&view_id[% ... %]
+<img src="[% image_link %]" [% ... %]
+title="[% title %]">[% ... %]
+作者：[% author %]">[% ... %]
+ISBN：[% isbn %]">[% ... %]
+出版商:[% publisher %]">[% ... %]
+出版日期:[% pubdate %]">[% ... %]
+售價：[% price_sell %]"><br>	
 END
 
 	my $extract = Template::Extract->new;
-	my $data = $extract->extract($template, $mechanize->content());
+	my $content = Text::Iconv->new("utf-8", "big5")->convert($mechanize->content());
+	my $data = $extract->extract($template, $content);
 
 	return $self->handler("Could not extract data from TWApexbook result page.")
 		unless(defined $data);
-
-	my $book = $data->{book};
-	$mechanize->get($book);
-
-	$template = <<END;
-<FORM METHOD=POST ACTION="cart.php?php_mode=additem&view_id[% ... %]
-<img src="[% image_link %]">[% ... %]
-class="FB F16 CB">[% title %]</TD>[% ... %]
-作者：[% author %]<br>[% ... %]
-ISBN：[% isbn %] <br>[% ... %]
-出版商:[% publisher %] <br>[% ... %]
-出版日期:[% pubdate %] <br>[% ... %]
-定價：[% price_list %]<br>[% ... %]
-售價：[% price_sell %]<br>	
-END
-
-	$data = $extract->extract($template, $mechanize->content());
-
-	return $self->handler("Could not extract data from TWApexbook result page.")
-		unless(defined $data);
-
-	$data->{title} =~ s/\s*$//;
-
-	if ($mechanize->content() =~ m/促銷價：(\d+) /) {
-		$data->{price_sell} = $1;
-	}
 
 	my $bk = {
 		'isbn'		=> $data->{isbn},
 		'title'		=> $data->{title},
 		'author'	=> $data->{author},
-		'book_link'	=> "http://www.apexbook.com.tw/".$book,
-		'image_link'	=> "http://www.apexbook.com.tw/".$data->{image_link},
+		'book_link'	=> $url,
+		'image_link'	=> "http://www.apexbook.com.tw/bookcovers/Covers/$isbn.jpg",
 		'pubdate'	=> $data->{pubdate},
 		'publisher'	=> $data->{publisher},
-		'price_list'	=> $data->{price_list},
 		'price_sell'	=> $data->{price_sell},
 	};
 
